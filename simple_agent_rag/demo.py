@@ -61,7 +61,8 @@ def demo_with_real_api():
         ]
         
         print("\n" + "="*60)
-        print("🤖 TESTING RAG AGENT WITH SAMPLE QUESTIONS")
+        print("🤖 TESTING DYNAMIC RAG AGENT")
+        print("💡 The LLM will dynamically choose which tools to use for each question")
         print("="*60)
         
         for i, question in enumerate(questions, 1):
@@ -70,36 +71,39 @@ def demo_with_real_api():
             
             start_time = time.time()
             
-            # Create grep patterns
-            grep_patterns = []
-            if "eiffel" in question.lower():
-                grep_patterns = ["Eiffel", "tower", "time", "visit"]
-            elif "museum" in question.lower():
-                grep_patterns = ["museum", "Louvre", "art"]
-            elif "restaurant" in question.lower():
-                grep_patterns = ["restaurant", "dining", "food"]
-            elif "weather" in question.lower():
-                grep_patterns = ["weather", "February", "rain"]
-            elif "day trip" in question.lower():
-                grep_patterns = ["Versailles", "trip", "train"]
-            
-            response = agent.answer_question(
-                question=question,
-                use_vector=True,
-                use_grep=True,
-                grep_patterns=grep_patterns
-            )
+            # Use new dynamic tool calling approach
+            response = agent.answer_question(question)
             
             duration = time.time() - start_time
             
             print(f"📝 Answer: {response['answer']}")
             print(f"⚡ Model: {response['model']}")
             print(f"⏱️  Time: {duration:.2f}s")
-            print(f"🔍 Sources found: {len(response['search_results'])} tools used")
+            print(f"🔄 Iterations: {response['iterations']}")
+            print(f"🛠️  Tools used: {len(response['tool_results'])}")
+            
+            # Show which tools were dynamically selected
+            if response['tool_results']:
+                tool_names = [tr['tool_name'] for tr in response['tool_results']]
+                print(f"🔍 LLM chose: {', '.join(tool_names)}")
+            
+            # Show cost info if available
+            if response.get('tokens_used'):
+                print(f"🪙 Tokens used: {response['tokens_used']}")
             
         print("\n" + "="*60)
-        print("✅ DEMO COMPLETED SUCCESSFULLY!")
+        print("✅ DYNAMIC RAG DEMO COMPLETED!")
         print("="*60)
+        print("\n🎯 What happened:")
+        print("1. 📊 Documents were embedded and indexed using OpenAI embeddings + FAISS")
+        print("2. 🧠 The o3 model INTELLIGENTLY CHOSE which tools to use for each question")
+        print("3. 🔍 Tools were called with LLM-generated parameters (no predefined patterns!)")
+        print("4. 🤖 Multi-turn conversations allowed iterative tool usage")
+        print("5. ⚡ Real-time performance and cost metrics were tracked")
+        
+        print("\n🚀 Key Improvement:")
+        print("🧠 LLM now acts as an autonomous agent that dynamically selects tools!")
+        print("🔍 No more predefined grep patterns - the LLM chooses what to search for!")
         
         return True
         
