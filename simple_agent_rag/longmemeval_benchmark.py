@@ -78,29 +78,7 @@ class LongMemEvalBenchmark:
         
         return documents
     
-    def create_grep_patterns(self, question: str) -> List[str]:
-        """Create grep patterns from the question"""
-        # Extract key terms from the question
-        patterns = []
-        
-        # Remove common words and extract meaningful terms
-        stop_words = {'what', 'when', 'where', 'who', 'how', 'why', 'is', 'are', 'was', 'were', 
-                     'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with'}
-        
-        # Simple word extraction
-        words = re.findall(r'\b\w+\b', question.lower())
-        key_words = [w for w in words if w not in stop_words and len(w) > 2]
-        
-        # Create patterns
-        if key_words:
-            patterns.extend(key_words[:5])  # Top 5 keywords
-        
-        # Add some common patterns
-        if 'date' in question.lower() or 'when' in question.lower():
-            patterns.append(r'\d{4}/\d{2}/\d{2}')  # Date pattern
-            patterns.append(r'\d{1,2}:\d{2}')      # Time pattern
-        
-        return patterns[:3]  # Limit to 3 patterns
+
     
     def lme_grader(self, question: str, gold_answer: str, response: str, question_type: str) -> bool:
         """Grade the response using LME grading criteria"""
@@ -201,18 +179,10 @@ class LongMemEvalBenchmark:
         self.rag_agent = RAGAgent(api_key=self.api_key)
         self.rag_agent.load_documents(documents)
         
-        # Create grep patterns
-        grep_patterns = self.create_grep_patterns(question)
-        
         retrieval_start = time.time()
         
-        # Get response from RAG agent
-        response_data = self.rag_agent.answer_question(
-            question=question,
-            use_vector=True,
-            use_grep=True,
-            grep_patterns=grep_patterns
-        )
+        # Get response from RAG agent (now with dynamic tool selection)
+        response_data = self.rag_agent.answer_question(question)
         
         retrieval_duration = time.time() - retrieval_start
         
