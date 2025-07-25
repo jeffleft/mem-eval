@@ -172,3 +172,5 @@ cython_debug/
 
 # Data files
 # kg_architecture_agent_memory/locomo_eval/data
+*.json
+simple_agent_rag/longmemeval_data.tar.gz

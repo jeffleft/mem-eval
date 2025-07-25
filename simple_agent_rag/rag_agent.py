@@ -16,17 +16,13 @@ class ToolResult(BaseModel):
 
 
 class RAGAgent:
-    """Simple RAG agent with o3 model and dynamic tool usage"""
+    """Simple RAG agent with dynamic tool usage"""
     
     def __init__(self, api_key: Optional[str] = None, model: str = "o3"):
         self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
         self.model = model
         self.vector_tool = VectorSearchTool(api_key=api_key)
         self.grep_tool = GrepTool()
-        
-        # Available models in order of preference
-        self.available_models = ["o3", "o1", "o1-preview", "gpt-4o", "gpt-4o-mini"]
-        self.active_model = self._select_available_model()
         
         # Define tools for function calling
         self.tools = [
@@ -107,26 +103,6 @@ class RAGAgent:
                 }
             }
         ]
-    
-    def _select_available_model(self) -> str:
-        """Test model availability and select the best one"""
-        for model in self.available_models:
-            try:
-                # Test with a minimal request
-                response = self.client.chat.completions.create(
-                    model=model,
-                    messages=[{"role": "user", "content": "Hi"}],
-                    max_tokens=5
-                )
-                print(f"✅ Using model: {model}")
-                return model
-            except Exception as e:
-                print(f"⚠️ Model {model} not available: {str(e)[:100]}")
-                continue
-        
-        # Fallback to gpt-4o-mini if nothing else works
-        print(f"⚠️ Using fallback model: gpt-4o-mini")
-        return "gpt-4o-mini"
     
     def load_documents(self, documents: List[str], metadata: Optional[List[Dict[str, Any]]] = None):
         """Load documents into both search tools"""
@@ -231,9 +207,7 @@ Available tools:
 2. grep_search: For finding exact patterns, regex matches, specific phrases, names, dates
 3. exact_search: For finding exact text matches
 
-When given a question, first analyze what information you need and use the appropriate tools to gather relevant context. Then provide a comprehensive answer based on the retrieved information.
-
-Always search for relevant information before answering. Use multiple tools if needed to get comprehensive results."""
+When given a question, first analyze what information you need and use the appropriate tools to gather relevant context. Then provide a comprehensive answer based on the retrieved information."""
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -241,56 +215,100 @@ Always search for relevant information before answering. Use multiple tools if n
         ]
         
         tool_results = []
-        max_iterations = 3  # Prevent infinite loops
+        max_iterations = 7  # Prevent infinite loops
         iteration = 0
+        final_answer = "No answer provided"
+        tokens_used = 0
+        
+        # Mock the first vector search using real search
+        if iteration == 0:
+            # Use real vector search with the question
+            real_tool_result = self.vector_tool.search(question, 5)
+            mock_tool_result = ToolResult(
+                tool_name="vector_search",
+                success=True,
+                result=real_tool_result
+            )
+            tool_results.append(mock_tool_result)
+            
+            # Add mock tool call and result to messages
+            mock_tool_call = {
+                'id': 'gather_context',
+                'type': 'function',
+                'function': {
+                    'name': 'vector_search',
+                    'arguments': '{"query":"' + question + '","top_k":5}'
+                }
+            }
+            
+            messages.append({
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [mock_tool_call]
+            })
+            messages.append({
+                "tool_call_id": "gather_context",
+                "role": "tool",
+                "name": "vector_search",
+                "content": json.dumps(mock_tool_result.dict())
+            })
         
         while iteration < max_iterations:
-            try:
+            # Update system prompt with current iteration info
+            if iteration > 0:
+                current_system_prompt = system_prompt + "\n\nNote that you are on " + str(iteration + 1) + " of a maximum of " + str(max_iterations) + " iterations."
+            else:
+                current_system_prompt = system_prompt
+            
+            # Add final iteration instruction
+            if iteration == max_iterations - 1:
+                current_system_prompt += "\n\nThis is your final iteration (no more tools can be used). Provide a comprehensive answer to the best of your ability based on all the information you've gathered."
+            
+                # Update the system message
+                messages[0] = {"role": "system", "content": current_system_prompt}
+                
+                # Call the model
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages
+                )
+            else:
+               # Update the system message
+                messages[0] = {"role": "system", "content": current_system_prompt}
+                
                 # Call the model with function calling enabled
                 response = self.client.chat.completions.create(
-                    model=self.active_model,
+                    model=self.model,
                     messages=messages,
                     tools=self.tools,
-                    tool_choice="auto",
-                    temperature=0.1,
-                    max_tokens=2048
                 )
-                
-                response_message = response.choices[0].message
-                
-                # Check if the model wants to call tools
-                if response_message.tool_calls:
-                    # Execute each tool call
-                    for tool_call in response_message.tool_calls:
-                        tool_result = self._execute_tool_call(tool_call)
-                        tool_results.append(tool_result)
-                        
-                        # Add tool result to conversation
-                        messages.append(response_message)
-                        messages.append({
-                            "tool_call_id": tool_call.id,
-                            "role": "tool",
-                            "name": tool_call.function.name,
-                            "content": json.dumps(tool_result.dict())
-                        })
+            
+            response_message = response.choices[0].message
+            
+            # Check if the model wants to call tools
+            if response_message.tool_calls:
+                # Execute each tool call
+                for tool_call in response_message.tool_calls:
+                    tool_result = self._execute_tool_call(tool_call)
+                    tool_results.append(tool_result)
                     
-                    iteration += 1
-                    continue  # Continue the conversation
+                    # Add tool result to conversation
+                    messages.append(response_message)
+                    messages.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": tool_call.function.name,
+                        "content": json.dumps(tool_result.dict())
+                    })
                 
-                else:
-                    # Model provided final answer
-                    final_answer = response_message.content
-                    tokens_used = response.usage.total_tokens if hasattr(response, 'usage') and response.usage else 0
-                    break
-                    
-            except Exception as e:
-                final_answer = f"Error during conversation: {str(e)}"
-                tokens_used = 0
+                iteration += 1
+                continue  # Continue the conversation
+            
+            else:
+                # Model provided final answer
+                final_answer = response_message.content
+                tokens_used = response.usage.total_tokens if hasattr(response, 'usage') and response.usage else 0
                 break
-        
-        else:
-            final_answer = "Maximum iterations reached without final answer"
-            tokens_used = 0
         
         duration = time.time() - start_time
         context = self._format_tool_results(tool_results)
@@ -298,12 +316,13 @@ Always search for relevant information before answering. Use multiple tools if n
         return {
             "question": question,
             "answer": final_answer,
-            "model": self.active_model,
+            "model": self.model,
             "context": context,
             "tool_results": [result.dict() for result in tool_results],
             "tokens_used": tokens_used,
             "duration": duration,
-            "iterations": iteration
+            "iterations": iteration,
+            "full_dialog": messages
         }
     
     def save_index(self, filepath: str):

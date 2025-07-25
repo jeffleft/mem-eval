@@ -98,6 +98,37 @@ documents = ["Document 1 text...", "Document 2 text..."]
 agent.load_documents(documents)
 
 # Ask questions
+response = agent.answer_question("Your question here")
+print(response['answer'])
+print(f"Message history: {len(response['full_dialog'])} messages")
+```
+
+## 📊 Message History and Analysis
+
+The benchmark now saves complete message history for each sample, including:
+- Full conversation dialog between user and assistant
+- Tool calls and their results
+- Iteration counts and reasoning steps
+- Tool usage patterns
+
+### Analyzing Message History
+
+Use the analysis utility to examine conversation patterns:
+
+```bash
+# Analyze a benchmark results file
+python analyze_message_history.py benchmark_results_20241201_143022.json
+
+# Save analysis to file
+python analyze_message_history.py benchmark_results_20241201_143022.json --output analysis.json
+```
+
+The analysis provides:
+- Message count statistics
+- Tool usage breakdown
+- Iteration patterns
+- Question type distribution
+- Grade distribution
 result = agent.answer_question(
     question="What is the main topic?",
     use_vector=True,

@@ -3,7 +3,6 @@ import faiss
 from typing import List, Dict, Any, Optional
 from openai import OpenAI
 import os
-from sentence_transformers import SentenceTransformer
 
 
 class VectorSearchTool:
@@ -27,9 +26,7 @@ class VectorSearchTool:
             return np.array(response.data[0].embedding, dtype=np.float32)
         except Exception as e:
             print(f"Error generating embedding: {e}")
-            # Fallback to sentence transformers if OpenAI fails
-            fallback_model = SentenceTransformer('all-MiniLM-L6-v2')
-            return fallback_model.encode([text])[0].astype(np.float32)
+            raise e
     
     def embed_texts(self, texts: List[str]) -> np.ndarray:
         """Generate embeddings for multiple texts"""

@@ -10,7 +10,9 @@ import time
 from openai import OpenAI
 from pydantic import BaseModel, Field
 from rag_agent import RAGAgent
-import re
+
+from dotenv import load_dotenv
+load_dotenv()
 
 
 class Grade(BaseModel):
@@ -150,7 +152,7 @@ class LongMemEvalBenchmark:
 
         try:
             response = self.client.beta.chat.completions.parse(
-                model='gpt-4o-mini',
+                model='gpt-4.1-mini',
                 messages=[{"role": "system", "content": system_prompt},
                          {"role": "user", "content": prompt}],
                 response_format=Grade,
@@ -202,7 +204,10 @@ class LongMemEvalBenchmark:
             "context_length": len(response_data['context'].split()),
             "retrieval_duration": retrieval_duration,
             "total_duration": total_duration,
-            "tokens_used": response_data.get('tokens_used', 0)
+            "tokens_used": response_data.get('tokens_used', 0),
+            "message_history": response_data.get('full_dialog', []),
+            "tool_results": response_data.get('tool_results', []),
+            "iterations": response_data.get('iterations', 0)
         }
         
         return result
@@ -292,7 +297,7 @@ def main():
     # Run benchmark on first 20 examples
     results = benchmark.run_benchmark(
         num_samples=20,
-        start_idx=0,
+        start_idx=200,
         question_types=None,  # Test all types
         model="o3"
     )

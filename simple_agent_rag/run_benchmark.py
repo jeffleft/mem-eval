@@ -8,11 +8,9 @@ import sys
 import argparse
 from datetime import datetime
 from longmemeval_benchmark import LongMemEvalBenchmark
-from test_rag_agent import test_rag_agent
 
 def main():
     parser = argparse.ArgumentParser(description="Run RAG agent benchmark against LongMemEval")
-    parser.add_argument("--test-only", action="store_true", help="Run quick test only")
     parser.add_argument("--num-samples", type=int, default=50, help="Number of samples to evaluate (default: 50)")
     parser.add_argument("--model", default="o3", help="Model to use (default: o3)")
     parser.add_argument("--api-key", help="OpenAI API key (or set OPENAI_API_KEY env var)")
@@ -31,12 +29,6 @@ def main():
     print(f"Model: {args.model}")
     print(f"Samples: {args.num_samples}")
     print("-" * 50)
-    
-    if args.test_only:
-        print("Running quick test...")
-        test_rag_agent()
-        print("Test completed successfully!")
-        return
     
     try:
         # Initialize benchmark
@@ -77,6 +69,17 @@ def main():
             json.dump(results, f, indent=2)
         
         print(f"\nDetailed results saved to: {results_file}")
+        print(f"Message history and tool interactions saved for each sample")
+        print(f"Total samples with conversation history: {len(results['detailed_results'])}")
+        
+        # Calculate message history statistics
+        total_messages = sum(len(result.get('message_history', [])) for result in results['detailed_results'])
+        total_tool_calls = sum(len(result.get('tool_results', [])) for result in results['detailed_results'])
+        avg_iterations = sum(result.get('iterations', 0) for result in results['detailed_results']) / len(results['detailed_results']) if results['detailed_results'] else 0
+        
+        print(f"Total messages across all samples: {total_messages}")
+        print(f"Total tool calls across all samples: {total_tool_calls}")
+        print(f"Average iterations per sample: {avg_iterations:.1f}")
         
     except Exception as e:
         print(f"Error running benchmark: {str(e)}")

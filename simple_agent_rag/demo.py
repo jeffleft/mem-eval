@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Demo script for Simple Agent RAG with o3
+Demo script for Simple Agent RAG
 Shows how to use the system with real OpenAI API
 """
 
@@ -8,6 +8,26 @@ import os
 import sys
 import time
 from datetime import datetime
+import json
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # If python-dotenv is not installed, try to load .env manually
+    def load_dotenv():
+        try:
+            with open('.env', 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        os.environ[key.strip()] = value.strip()
+        except FileNotFoundError:
+            pass
+    
+    load_dotenv()
 
 def demo_with_real_api():
     """Demo using real OpenAI API"""
@@ -16,16 +36,20 @@ def demo_with_real_api():
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         print("❌ No OpenAI API key found!")
-        print("Please set your API key:")
-        print("export OPENAI_API_KEY='your-api-key-here'")
+        print("Please set your API key in one of these ways:")
+        print("1. Environment variable:")
+        print("   export OPENAI_API_KEY='your-api-key-here'")
+        print("2. Or create a .env file in the project root:")
+        print("   OPENAI_API_KEY=your-api-key-here")
         return False
     
     try:
         from rag_agent import RAGAgent
         
-        print("🚀 Initializing RAG agent with o3...")
-        agent = RAGAgent(api_key=api_key, model="o3")
-        print(f"✅ Agent initialized with model: {agent.active_model}")
+        model = "o3"
+        print(f"🚀 Initializing RAG agent with {model}...")
+        agent = RAGAgent(api_key=api_key, model=model)
+        print(f"✅ Agent initialized with model: {agent.model}")
         
         # Sample long conversation documents
         documents = [
@@ -90,13 +114,51 @@ def demo_with_real_api():
             # Show cost info if available
             if response.get('tokens_used'):
                 print(f"🪙 Tokens used: {response['tokens_used']}")
-            
+
+            # dump the full dialog to a file
+            with open(f"dialog_{i}.json", "w") as f:
+                # Convert messages to serializable format
+                serializable_messages = []
+                for msg in response['full_dialog']:
+                    if isinstance(msg, dict):
+                        # Already a dictionary (system, user messages)
+                        serializable_messages.append(msg)
+                    else:
+                        # ChatCompletionMessage object - convert to dict
+                        msg_dict = {
+                            'role': msg.role,
+                            'content': msg.content
+                        }
+                        
+                        # Add tool_calls if present
+                        if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                            msg_dict['tool_calls'] = []
+                            for tool_call in msg.tool_calls:
+                                tool_call_dict = {
+                                    'id': tool_call.id,
+                                    'type': tool_call.type,
+                                    'function': {
+                                        'name': tool_call.function.name,
+                                        'arguments': tool_call.function.arguments
+                                    }
+                                }
+                                msg_dict['tool_calls'].append(tool_call_dict)
+                        
+                        # Add tool_call_id and name if present
+                        if hasattr(msg, 'tool_call_id') and msg.tool_call_id:
+                            msg_dict['tool_call_id'] = msg.tool_call_id
+                            msg_dict['name'] = getattr(msg, 'name', None)
+                        
+                        serializable_messages.append(msg_dict)
+                
+                json.dump(serializable_messages, f, indent=2)
+
         print("\n" + "="*60)
         print("✅ DYNAMIC RAG DEMO COMPLETED!")
         print("="*60)
         print("\n🎯 What happened:")
         print("1. 📊 Documents were embedded and indexed using OpenAI embeddings + FAISS")
-        print("2. 🧠 The o3 model INTELLIGENTLY CHOSE which tools to use for each question")
+        print("2. 🧠 The LLM INTELLIGENTLY CHOSE which tools to use for each question")
         print("3. 🔍 Tools were called with LLM-generated parameters (no predefined patterns!)")
         print("4. 🤖 Multi-turn conversations allowed iterative tool usage")
         print("5. ⚡ Real-time performance and cost metrics were tracked")
@@ -113,64 +175,31 @@ def demo_with_real_api():
         traceback.print_exc()
         return False
 
-def show_benchmark_instructions():
-    """Show instructions for running the full benchmark"""
-    print("\n" + "="*60)
-    print("📊 RUNNING THE LONGMEMEVAL BENCHMARK")
-    print("="*60)
-    print()
-    print("To run the full benchmark against LongMemEval:")
-    print()
-    print("1. Set your OpenAI API key:")
-    print("   export OPENAI_API_KEY='your-api-key-here'")
-    print()
-    print("2. Run quick test:")
-    print("   python3 run_benchmark.py --test-only")
-    print()
-    print("3. Run small benchmark (50 samples):")
-    print("   python3 run_benchmark.py --num-samples 50")
-    print()
-    print("4. Run full benchmark (all samples):")
-    print("   python3 run_benchmark.py --num-samples 1000")
-    print()
-    print("5. Use specific model:")
-    print("   python3 run_benchmark.py --model gpt-4o --num-samples 100")
-    print()
-    print("Available models (in order of preference):")
-    print("  - o3 (latest reasoning model)")
-    print("  - o1")
-    print("  - o1-preview")
-    print("  - gpt-4o")
-    print("  - gpt-4o-mini")
-    print()
-    print("The system will automatically fall back to available models.")
-    print("="*60)
-
 def main():
     """Main demo function"""
-    print("🎯 Simple Agent RAG with o3 Demo")
+    print("🎯 Simple Agent RAG Demo")
     print("=" * 40)
     
     # Check if API key is available
     if os.getenv("OPENAI_API_KEY"):
         print("🔑 OpenAI API key found - running live demo...")
-        success = demo_with_real_api()
-        if success:
-            show_benchmark_instructions()
+        demo_with_real_api()
     else:
         print("ℹ️  No OpenAI API key found - showing instructions...")
         print()
         print("To run this demo with real OpenAI API:")
         print("1. Get your API key from https://platform.openai.com/api-keys")
-        print("2. Set it as an environment variable:")
-        print("   export OPENAI_API_KEY='your-api-key-here'")
+        print("2. Set it in one of these ways:")
+        print("   a) Environment variable:")
+        print("      export OPENAI_API_KEY='your-api-key-here'")
+        print("   b) Or create a .env file in the project root:")
+        print("      OPENAI_API_KEY=your-api-key-here")
         print("3. Run this demo again:")
         print("   python3 demo.py")
         print()
         print("For testing without API key, run:")
         print("   python3 test_rag_agent_mock.py")
         print()
-        show_benchmark_instructions()
 
 if __name__ == "__main__":
     main()
